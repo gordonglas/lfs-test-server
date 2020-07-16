@@ -683,5 +683,5 @@ func writeStatus(w http.ResponseWriter, r *http.Request, status int) {
 }
 
 func logRequest(r *http.Request, status int) {
-	logger.Log(kv{"method": r.Method, "url": r.URL, "status": status, "request_id": context.Get(r, "RequestID")})
+	logger.Log(kv{"method": r.Method, "url": r.URL, "status": status, "ip": r.RemoteAddr, "request_id": context.Get(r, "RequestID")})
 }
