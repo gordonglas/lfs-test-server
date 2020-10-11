@@ -6,7 +6,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/GeertJohan/go.rice"
+	rice "github.com/GeertJohan/go.rice"
 	"github.com/gorilla/mux"
 )
 
@@ -27,6 +27,7 @@ type pageData struct {
 func (a *App) addMgmt(r *mux.Router) {
 	r.HandleFunc("/mgmt", basicAuth(a.indexHandler)).Methods("GET")
 	r.HandleFunc("/mgmt/objects", basicAuth(a.objectsHandler)).Methods("GET")
+	r.HandleFunc("/mgmt/object/del/{oid}", basicAuth(a.deleteObjectHandler)).Methods("GET")
 	r.HandleFunc("/mgmt/raw/{oid}", basicAuth(a.objectsRawHandler)).Methods("GET")
 	r.HandleFunc("/mgmt/locks", basicAuth(a.locksHandler)).Methods("GET")
 	r.HandleFunc("/mgmt/users", basicAuth(a.usersHandler)).Methods("GET")
@@ -179,6 +180,41 @@ func (a *App) delUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, "/mgmt/users", 302)
+}
+
+// assumes there are no locks on the object
+func (a *App) deleteObjectHandler(w http.ResponseWriter, r *http.Request) {
+	logger.Log(kv{"INFO": "deleteObjectHandler 1"})
+	vars := mux.Vars(r)
+	rv := &RequestVars{Oid: vars["oid"]}
+
+	// make sure object exists
+	_, err := a.metaStore.UnsafeGet(rv) // first param is meta
+	if err != nil {
+		writeStatus(w, r, 404)
+		return
+	}
+
+	// TODO: maybe delete lock on this file, if exists? see server.go::CreateLockHandler
+
+	err = a.contentStore.DeleteFile(rv.Oid)
+	if err != nil {
+		writeStatus(w, r, 500)
+		return
+	}
+
+	// delete the metadata
+	err = a.metaStore.Delete(rv)
+	if err != nil {
+		writeStatus(w, r, 500)
+		return
+	}
+
+	json := "{\"success\": \"true\"}"
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(json)))
+	fmt.Fprintf(w, json)
 }
 
 func render(w http.ResponseWriter, tmpl string, data pageData) error {

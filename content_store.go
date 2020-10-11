@@ -12,6 +12,7 @@ import (
 var (
 	errHashMismatch = errors.New("Content hash does not match OID")
 	errSizeMismatch = errors.New("Content size does not match")
+	errFileNotExist = errors.New("Content file does not exist")
 )
 
 // ContentStore provides a simple file system based storage.
@@ -81,6 +82,23 @@ func (s *ContentStore) Put(meta *MetaObject, r io.Reader) error {
 	if err := os.Rename(tmpPath, path); err != nil {
 		return err
 	}
+	return nil
+}
+
+// DeleteFile removes the file from the store.
+func (s *ContentStore) DeleteFile(oid string) error {
+	path := filepath.Join(s.basePath, transformKey(oid))
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return errFileNotExist
+	}
+
+	err := os.Remove(path)
+	if err != nil {
+		return err
+	}
+
+	// TODO: if folder is now empty, delete it, and do same check for parent folder
+
 	return nil
 }
 

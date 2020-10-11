@@ -133,3 +133,13 @@ Check the managment page
 browser: https://localhost:9999/mgmt
 
 
+## Additional features
+
+Endpoint to delete an object from the metadata db and content store.
+
+```
+https://localhost:9999/mgmt/object/del/{oid}
+
+```
+
+Logs IP address for fail2ban auth monitoring.
