@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -56,8 +57,10 @@ func (l *KVLogger) Log(data kv) {
 	out := fmt.Sprintf("%s %s lfs[%d] [%s:%d]: ", time.Now().UTC().Format(time.RFC3339), hostname, pid, file, line)
 	var vals []string
 
-	for k, v := range data {
-		vals = append(vals, fmt.Sprintf("%s=%v", k, v))
+	ordered := l.orderMapByKey(data)
+
+	for _, k := range ordered {
+		vals = append(vals, fmt.Sprintf("%s=%v", k, data[k]))
 	}
 	out += strings.Join(vals, " ")
 
@@ -70,4 +73,15 @@ func (l *KVLogger) Log(data kv) {
 func (l *KVLogger) Fatal(data kv) {
 	l.Log(data)
 	os.Exit(1)
+}
+
+func (l *KVLogger) orderMapByKey(data kv) []string {
+	keys := make([]string, len(data))
+	i := 0
+	for k := range data {
+		keys[i] = k
+		i++
+	}
+	sort.Strings(keys)
+	return keys
 }

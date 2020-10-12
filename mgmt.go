@@ -184,7 +184,6 @@ func (a *App) delUserHandler(w http.ResponseWriter, r *http.Request) {
 
 // assumes there are no locks on the object
 func (a *App) deleteObjectHandler(w http.ResponseWriter, r *http.Request) {
-	logger.Log(kv{"INFO": "deleteObjectHandler 1"})
 	vars := mux.Vars(r)
 	rv := &RequestVars{Oid: vars["oid"]}
 
