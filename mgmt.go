@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"strings"
 
 	rice "github.com/GeertJohan/go.rice"
 	"github.com/gorilla/mux"
@@ -43,7 +44,7 @@ func cssHandler(w http.ResponseWriter, r *http.Request) {
 	file := mux.Vars(r)["file"]
 	f, err := cssBox.Open(file)
 	if err != nil {
-		writeStatus(w, r, 404)
+		writeStatus(w, r, 404, false)
 		return
 	}
 
@@ -67,7 +68,7 @@ func checkBasicAuth(user string, pass string, ok bool) bool {
 func basicAuth(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if Config.AdminUser == "" || Config.AdminPass == "" {
-			writeStatus(w, r, 404)
+			writeStatus(w, r, 404, false)
 			return
 		}
 
@@ -76,7 +77,11 @@ func basicAuth(h http.HandlerFunc) http.HandlerFunc {
 		ret := checkBasicAuth(user, pass, ok)
 		if !ret {
 			w.Header().Set("WWW-Authenticate", "Basic realm=mgmt")
-			writeStatus(w, r, 401)
+
+			// if user is empty, this is probably the initial 401 response
+			isInitialAuthResponse := strings.TrimSpace(user) == ""
+
+			writeStatus(w, r, 401, isInitialAuthResponse)
 			return
 		}
 
@@ -87,7 +92,7 @@ func basicAuth(h http.HandlerFunc) http.HandlerFunc {
 
 func (a *App) indexHandler(w http.ResponseWriter, r *http.Request) {
 	if err := render(w, "config.tmpl", pageData{Name: "index", Config: Config}); err != nil {
-		writeStatus(w, r, 404)
+		writeStatus(w, r, 404, false)
 	}
 }
 
@@ -99,7 +104,7 @@ func (a *App) objectsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := render(w, "objects.tmpl", pageData{Name: "objects", Objects: objects}); err != nil {
-		writeStatus(w, r, 404)
+		writeStatus(w, r, 404, false)
 	}
 }
 
@@ -109,13 +114,13 @@ func (a *App) objectsRawHandler(w http.ResponseWriter, r *http.Request) {
 
 	meta, err := a.metaStore.UnsafeGet(rv)
 	if err != nil {
-		writeStatus(w, r, 404)
+		writeStatus(w, r, 404, false)
 		return
 	}
 
 	content, err := a.contentStore.Get(meta, 0)
 	if err != nil {
-		writeStatus(w, r, 404)
+		writeStatus(w, r, 404, false)
 		return
 	}
 	defer content.Close()
@@ -135,7 +140,7 @@ func (a *App) locksHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := render(w, "locks.tmpl", pageData{Name: "locks", Locks: locks}); err != nil {
-		writeStatus(w, r, 404)
+		writeStatus(w, r, 404, false)
 	}
 }
 
@@ -147,7 +152,7 @@ func (a *App) usersHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := render(w, "users.tmpl", pageData{Name: "users", Users: users}); err != nil {
-		writeStatus(w, r, 404)
+		writeStatus(w, r, 404, false)
 	}
 }
 
@@ -190,7 +195,7 @@ func (a *App) deleteObjectHandler(w http.ResponseWriter, r *http.Request) {
 	// make sure object exists
 	_, err := a.metaStore.UnsafeGet(rv) // first param is meta
 	if err != nil {
-		writeStatus(w, r, 404)
+		writeStatus(w, r, 404, false)
 		return
 	}
 
@@ -198,14 +203,14 @@ func (a *App) deleteObjectHandler(w http.ResponseWriter, r *http.Request) {
 
 	err = a.contentStore.DeleteFile(rv.Oid)
 	if err != nil {
-		writeStatus(w, r, 500)
+		writeStatus(w, r, 500, false)
 		return
 	}
 
 	// delete the metadata
 	err = a.metaStore.Delete(rv)
 	if err != nil {
-		writeStatus(w, r, 500)
+		writeStatus(w, r, 500, false)
 		return
 	}
 

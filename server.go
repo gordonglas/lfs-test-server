@@ -228,7 +228,7 @@ func (a *App) GetContentHandler(w http.ResponseWriter, r *http.Request) {
 	rv := unpack(r)
 	meta, err := a.metaStore.Get(rv)
 	if err != nil {
-		writeStatus(w, r, 404)
+		writeStatus(w, r, 404, false)
 		return
 	}
 
@@ -247,7 +247,7 @@ func (a *App) GetContentHandler(w http.ResponseWriter, r *http.Request) {
 
 	content, err := a.contentStore.Get(meta, fromByte)
 	if err != nil {
-		writeStatus(w, r, 404)
+		writeStatus(w, r, 404, false)
 		return
 	}
 	defer content.Close()
@@ -262,7 +262,7 @@ func (a *App) GetMetaHandler(w http.ResponseWriter, r *http.Request) {
 	rv := unpack(r)
 	meta, err := a.metaStore.Get(rv)
 	if err != nil {
-		writeStatus(w, r, 404)
+		writeStatus(w, r, 404, false)
 		return
 	}
 
@@ -281,7 +281,7 @@ func (a *App) PostHandler(w http.ResponseWriter, r *http.Request) {
 	rv := unpack(r)
 	meta, err := a.metaStore.Put(rv)
 	if err != nil {
-		writeStatus(w, r, 404)
+		writeStatus(w, r, 404, false)
 		return
 	}
 
@@ -359,7 +359,7 @@ func (a *App) PutHandler(w http.ResponseWriter, r *http.Request) {
 	rv := unpack(r)
 	meta, err := a.metaStore.Get(rv)
 	if err != nil {
-		writeStatus(w, r, 404)
+		writeStatus(w, r, 404, false)
 		return
 	}
 
@@ -591,7 +591,11 @@ func (a *App) requireAuth(h http.HandlerFunc) http.HandlerFunc {
 			user, password, _ := r.BasicAuth()
 			if user, ret := a.metaStore.Authenticate(user, password); !ret {
 				w.Header().Set("WWW-Authenticate", "Basic realm=git-lfs-server")
-				writeStatus(w, r, 401)
+
+				// if user is empty, this is probably the initial 401 response
+				isInitialAuthResponse := strings.TrimSpace(user) == ""
+
+				writeStatus(w, r, 401, isInitialAuthResponse)
 				return
 			} else {
 				context.Set(r, "USER", user)
@@ -668,7 +672,7 @@ func unpackBatch(r *http.Request) *BatchVars {
 	return &bv
 }
 
-func writeStatus(w http.ResponseWriter, r *http.Request, status int) {
+func writeStatus(w http.ResponseWriter, r *http.Request, status int, isInitialAuthResponse bool) {
 	message := http.StatusText(status)
 
 	mediaParts := strings.Split(r.Header.Get("Accept"), ";")
@@ -678,8 +682,22 @@ func writeStatus(w http.ResponseWriter, r *http.Request, status int) {
 	}
 
 	w.WriteHeader(status)
+
 	fmt.Fprint(w, message)
-	logRequest(r, status)
+
+	if status == 401 {
+		// Use different log format for initial 401 response to keep it separate.
+		// This allows us to monitor the log with tools such as fail2ban.
+		if isInitialAuthResponse {
+			logger.Log(kv{"initialAuthResponse": true, "ip": r.RemoteAddr, "url": r.URL})
+		} else {
+			// Failed auth attempt.
+			// Explicitly pass fields here to prevent upstream code changes made to the logger from breaking and therefore bypassing fail2ban auth monitoring regex.
+			logger.Log(kv{"method": r.Method, "url": r.URL, "status": status, "ip": r.RemoteAddr, "request_id": context.Get(r, "RequestID")})
+		}
+	} else {
+		logRequest(r, status)
+	}
 }
 
 func logRequest(r *http.Request, status int) {
